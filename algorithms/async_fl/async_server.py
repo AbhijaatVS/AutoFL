@@ -96,6 +96,12 @@ class AsyncServer(Server):
         # Track client data percentages for streaming scenarios
         self.client_data_percs: Dict[str, List[float]] = {}
         
+        # Per-client prototype embeddings: {client_id: {class_label: np.ndarray}}
+        self.client_prototypes: Dict[str, Dict[int, Any]] = {}
+
+        # Per-client binmask tracking
+        self.binmask: Dict[str, Any] = {}
+        
         # Configuration
         config = config or {}
         self.is_streaming = config.get("is_streaming", False)
@@ -474,6 +480,20 @@ def _handle_finished_future_after_fit(
             res.num_examples,
         )
         server.set_new_params(parameters_aggregated)
+
+        # Extract per-class prototype embeddings if present
+        if "prototypes" in res.metrics:
+            client_prototypes = pickle.loads(res.metrics["prototypes"])
+            server.client_prototypes[clientProxy.cid] = client_prototypes
+            log(DEBUG, "Received %d class prototypes from client %s",
+                len(client_prototypes), clientProxy.cid)
+
+        # Extract binmask if present    
+        if "binmask" in res.metrics:
+            client_binmask = pickle.loads(res.metrics["binmask"])
+            server.binmask[clientProxy.cid] = client_binmask
+            log(DEBUG, "Received binmask of size %s from client %s",
+                len(client_binmask), clientProxy.cid)
 
         # Log metrics
         metrics = {"sample_sizes": res.num_examples, "t_diff": t_diff, **res.metrics}
