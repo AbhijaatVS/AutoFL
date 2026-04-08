@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 import os
+import pickle
 import warnings
 from typing import Any, Dict, List, Optional
 from time import time, sleep
@@ -321,6 +322,8 @@ def run_async_simulation(
     start_time = time()
     end_time = start_time + total_train_time
     update_count = 0
+    prototypes_recv_count: Dict[str, int] = {}
+    binmask_recv_count: Dict[str, int] = {}
     
     def train_client(client_idx: int) -> tuple:
         """Train a single client and return results."""
@@ -351,6 +354,28 @@ def run_async_simulation(
             )
             current_params = new_params
             update_count += 1
+
+        cid = str(client_idx)
+        proto_count = prototypes_recv_count.get(cid, 0)
+        binmask_count = binmask_recv_count.get(cid, 0)
+
+        if "prototypes" in fit_res.metrics:
+            try:
+                client_prototypes = pickle.loads(fit_res.metrics["prototypes"])
+                if isinstance(client_prototypes, dict):
+                    proto_count += 1
+                    prototypes_recv_count[cid] = proto_count
+            except Exception as exc:
+                print(f"[WARN] Failed to decode prototypes from client {cid}: {exc}")
+
+        if "binmask" in fit_res.metrics:
+            try:
+                client_binmask = pickle.loads(fit_res.metrics["binmask"])
+                if isinstance(client_binmask, dict):
+                    binmask_count += 1
+                    binmask_recv_count[cid] = binmask_count
+            except Exception as exc:
+                print(f"[WARN] Failed to decode binmask from client {cid}: {exc}")
         
         elapsed = time() - start_time
         history.add_metrics_distributed_fit_async(
@@ -359,8 +384,15 @@ def run_async_simulation(
                 "loss": fit_res.metrics.get("loss", 0),
                 "staleness": t_diff,
                 "samples": fit_res.num_examples,
+                "proto_recv_count": proto_count,
+                "binmask_recv_count": binmask_count,
             },
             timestamp=elapsed,
+        )
+
+        print(
+            f"[recv] client {cid}: prototypes_received={proto_count}, "
+            f"binmask_received={binmask_count}"
         )
         
         return t_diff
@@ -452,6 +484,14 @@ def run_async_simulation(
     print(f"  - Total updates: {update_count}")
     print(f"  - Final Loss: {final_loss:.4f}")
     print(f"  - Final Accuracy: {final_acc:.4f}")
+    print("  - Receive counts by client:")
+    for idx in range(num_clients):
+        cid = str(idx)
+        print(
+            f"      client {cid}: "
+            f"prototypes={prototypes_recv_count.get(cid, 0)}, "
+            f"binmask={binmask_recv_count.get(cid, 0)}"
+        )
     print("=" * 60)
     
     history.add_loss_centralized_async(timestamp=elapsed, loss=final_loss)

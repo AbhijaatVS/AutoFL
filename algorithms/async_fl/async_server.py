@@ -487,6 +487,10 @@ def _handle_finished_future_after_fit(
             server.client_prototypes[clientProxy.cid] = client_prototypes
             log(DEBUG, "Received %d class prototypes from client %s",
                 len(client_prototypes), clientProxy.cid)
+            print(
+                f"[AsyncServer] client {clientProxy.cid}: received prototypes for "
+                f"{len(client_prototypes)} classes"
+            )
 
         # Extract binmask if present    
         if "binmask" in res.metrics:
@@ -494,6 +498,10 @@ def _handle_finished_future_after_fit(
             server.binmask[clientProxy.cid] = client_binmask
             log(DEBUG, "Received binmask of size %s from client %s",
                 len(client_binmask), clientProxy.cid)
+            print(
+                f"[AsyncServer] client {clientProxy.cid}: received binmask with "
+                f"{len(client_binmask)} parameter groups"
+            )
 
         # Log metrics
         metrics = {"sample_sizes": res.num_examples, "t_diff": t_diff, **res.metrics}
